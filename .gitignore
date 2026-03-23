@@ -1,0 +1,8 @@
+/bin/
+*.out
+*.test
+.env
+node_modules/
+frontend/dist/
+*.png
+!docs/**/*.png
