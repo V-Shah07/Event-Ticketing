@@ -1,0 +1,8 @@
+=== RUN   TestEventCRUDWithJWT
+    server_test.go:85: PASS Phase1: organizer registered, event d70a2023-bcf8-4f2a-b814-ec4cb54cd936 created + published + listed via REST with JWT
+--- PASS: TestEventCRUDWithJWT (0.20s)
+=== RUN   TestUnauthenticatedCannotCreate
+    server_test.go:116: PASS Phase1: writes reject anonymous (401) and buyer (403)
+--- PASS: TestUnauthenticatedCannotCreate (0.13s)
+PASS
+ok  	github.com/v-shah07/event-ticketing/internal/server	0.330s
