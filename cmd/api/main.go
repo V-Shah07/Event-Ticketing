@@ -15,6 +15,7 @@ import (
 	"github.com/v-shah07/event-ticketing/internal/cache"
 	"github.com/v-shah07/event-ticketing/internal/config"
 	"github.com/v-shah07/event-ticketing/internal/db"
+	"github.com/v-shah07/event-ticketing/internal/payment"
 	"github.com/v-shah07/event-ticketing/internal/server"
 )
 
@@ -40,10 +41,24 @@ func main() {
 	defer rdb.Close()
 	log.Println("redis connected")
 
+	// Use real Stripe when a key is present; otherwise a mock provider keeps the
+	// platform fully runnable in local dev / CI without a Stripe account.
+	var provider payment.Provider
+	if cfg.StripeSecretKey != "" {
+		provider = payment.NewStripeProvider(cfg.StripeSecretKey)
+		log.Println("payments: using Stripe provider")
+	} else {
+		provider = payment.NewMockProvider()
+		log.Println("payments: STRIPE_SECRET_KEY unset, using mock provider")
+	}
+	payments := payment.NewService(pool, rdb, provider)
+
 	handler := server.New(server.Deps{
-		Pool:  pool,
-		Redis: rdb,
-		JWT:   auth.NewManager(cfg.JWTSecret),
+		Pool:          pool,
+		Redis:         rdb,
+		JWT:           auth.NewManager(cfg.JWTSecret),
+		Payments:      payments,
+		StripeWebhKey: cfg.StripeWebhookKey,
 	})
 
 	srv := &http.Server{
