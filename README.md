@@ -18,7 +18,7 @@ tests that deliberately try to break them.
 | Phase | Feature | State |
 |------:|---------|-------|
 | 1 | Skeleton, Postgres schema, REST event CRUD + JWT, Docker Compose, CI | ✅ |
-| 2 | Stripe idempotent webhooks (Redis keys) | ⏳ |
+| 2 | Stripe idempotent webhooks (Redis keys) | ✅ |
 | 3 | Inventory concurrency (`SELECT FOR UPDATE`) | ⏳ |
 | 4 | gRPC + Protobuf analytics service | ⏳ |
 | 5 | QR generation + Redis `SETNX` exactly-once entry | ⏳ |
