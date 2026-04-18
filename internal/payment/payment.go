@@ -17,6 +17,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
+	"github.com/v-shah07/event-ticketing/internal/inventory"
 )
 
 var (
@@ -32,6 +33,7 @@ type Service struct {
 	rdb      *redis.Client
 	provider Provider
 	idempo   *idempotencyStore
+	inv      *inventory.Cache
 }
 
 func NewService(pool *pgxpool.Pool, rdb *redis.Client, provider Provider) *Service {
@@ -40,6 +42,7 @@ func NewService(pool *pgxpool.Pool, rdb *redis.Client, provider Provider) *Servi
 		rdb:      rdb,
 		provider: provider,
 		idempo:   newIdempotencyStore(rdb),
+		inv:      inventory.NewCache(pool, rdb),
 	}
 }
 
@@ -200,11 +203,7 @@ func (s *Service) processInTx(ctx context.Context, intentID string) (ProcessResu
 	}
 
 	// Inventory changed: drop the cached count so reads recompute (Phase 3).
-	s.invalidateInventoryCache(ctx, tierID)
+	s.inv.Invalidate(ctx, tierID)
 
 	return ProcessResult{Created: true, TicketsMinted: quantity}, nil
-}
-
-func (s *Service) invalidateInventoryCache(ctx context.Context, tierID string) {
-	_ = s.rdb.Del(ctx, "inventory:tier:"+tierID).Err()
 }
