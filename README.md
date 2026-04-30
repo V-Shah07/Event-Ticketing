@@ -20,7 +20,7 @@ tests that deliberately try to break them.
 | 1 | Skeleton, Postgres schema, REST event CRUD + JWT, Docker Compose, CI | ✅ |
 | 2 | Stripe idempotent webhooks (Redis keys) | ✅ |
 | 3 | Inventory concurrency (`SELECT FOR UPDATE`) | ✅ |
-| 4 | gRPC + Protobuf analytics service | ⏳ |
+| 4 | gRPC + Protobuf analytics service | ✅ |
 | 5 | QR generation + Redis `SETNX` exactly-once entry | ⏳ |
 | 6 | Kafka analytics + WebSocket live dashboard | ⏳ |
 | 7 | GraphQL discovery + PostGIS geo search | ⏳ |
@@ -66,6 +66,32 @@ curl -s $BASE/events            # the published event appears
         (+PostGIS)   (locks/cache/    (test mode)
                       idempotency)
 ```
+
+## Internal gRPC contract (core ↔ analytics)
+
+The core API pushes committed purchases to a standalone **analytics service**
+over gRPC, using a client-streaming RPC (`RecordStream`) plus a unary read
+(`GetStats`). Full contract in [`proto/analytics.proto`](proto/analytics.proto):
+
+```protobuf
+message PurchaseEvent {
+  string purchase_id = 1;
+  string event_id = 2;
+  string tier_id = 3;
+  string buyer_id = 4;
+  int64 amount_cents = 5;
+  int32 quantity = 6;
+  google.protobuf.Timestamp occurred_at = 7;
+}
+
+service AnalyticsService {
+  // client-streaming: push a live feed of purchases without a round trip each
+  rpc RecordStream(stream PurchaseEvent) returns (RecordAck);
+  rpc GetStats(StatsRequest) returns (EventStats);
+}
+```
+
+Regenerate stubs with `make proto` (requires `protoc` + the Go plugins).
 
 ## Tech stack
 

@@ -1,0 +1,5 @@
+=== RUN   TestPurchaseFlowsToAnalyticsOverGRPC
+    grpc_integration_test.go:91: PASS Phase4: 5 purchases streamed core->analytics over gRPC; GetStats returned tickets_sold=5 revenue_cents=12500 velocity=5.00/min
+--- PASS: TestPurchaseFlowsToAnalyticsOverGRPC (0.50s)
+PASS
+ok  	github.com/v-shah07/event-ticketing/internal/analytics	0.505s

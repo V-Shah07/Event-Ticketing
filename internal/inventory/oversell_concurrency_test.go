@@ -165,7 +165,10 @@ func mkEvent(t *testing.T, baseURL, tok string) string {
 	body, _ := json.Marshal(map[string]string{"title": "Oversell Test", "category": "music"})
 	req, _ := http.NewRequest("POST", baseURL+"/events", bytes.NewReader(body))
 	req.Header.Set("Authorization", "Bearer "+tok)
-	resp, _ := http.DefaultClient.Do(req)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
 	defer resp.Body.Close()
 	var out struct {
 		ID string `json:"id"`
@@ -179,7 +182,10 @@ func mkTier(t *testing.T, baseURL, tok, eventID string, capacity int) string {
 	body, _ := json.Marshal(map[string]any{"name": "GA", "price_cents": 1000, "capacity": capacity})
 	req, _ := http.NewRequest("POST", baseURL+"/events/"+eventID+"/tiers", bytes.NewReader(body))
 	req.Header.Set("Authorization", "Bearer "+tok)
-	resp, _ := http.DefaultClient.Do(req)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
 	defer resp.Body.Close()
 	var out struct {
 		ID string `json:"id"`
