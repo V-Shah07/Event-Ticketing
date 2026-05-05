@@ -14,6 +14,7 @@ import (
 	"github.com/v-shah07/event-ticketing/internal/event"
 	"github.com/v-shah07/event-ticketing/internal/inventory"
 	"github.com/v-shah07/event-ticketing/internal/payment"
+	"github.com/v-shah07/event-ticketing/internal/ticket"
 	"github.com/v-shah07/event-ticketing/internal/user"
 )
 
@@ -23,6 +24,8 @@ type Deps struct {
 	JWT           *auth.Manager
 	Payments      *payment.Service
 	StripeWebhKey string
+	TicketSigner  ticket.Signer
+	QRDir         string
 }
 
 func New(d Deps) http.Handler {
@@ -72,6 +75,11 @@ func New(d Deps) http.Handler {
 		})
 		r.Post("/webhooks/stripe", payH.Webhook)
 	}
+
+	// Ticket QR validation (door scanners) + PNG retrieval.
+	ticketH := ticket.NewHandler(ticket.NewValidator(d.Pool, d.Redis, d.TicketSigner), d.QRDir)
+	r.Post("/tickets/validate", ticketH.Validate)
+	r.Get("/tickets/{id}/qr.png", ticketH.QR)
 
 	return r
 }

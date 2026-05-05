@@ -18,6 +18,7 @@ import (
 	"github.com/v-shah07/event-ticketing/internal/db"
 	"github.com/v-shah07/event-ticketing/internal/payment"
 	"github.com/v-shah07/event-ticketing/internal/server"
+	"github.com/v-shah07/event-ticketing/internal/ticket"
 )
 
 func main() {
@@ -64,12 +65,18 @@ func main() {
 		log.Printf("analytics client connected to %s", cfg.AnalyticsAddr)
 	}
 
+	// Wire QR issuance: minted tickets get a signed token + PNG after commit.
+	signer := ticket.NewSigner(cfg.TicketSecret)
+	payments.SetTicketIssuer(ticket.NewIssuer(pool, signer, cfg.QRDir))
+
 	handler := server.New(server.Deps{
 		Pool:          pool,
 		Redis:         rdb,
 		JWT:           auth.NewManager(cfg.JWTSecret),
 		Payments:      payments,
 		StripeWebhKey: cfg.StripeWebhookKey,
+		TicketSigner:  signer,
+		QRDir:         cfg.QRDir,
 	})
 
 	srv := &http.Server{

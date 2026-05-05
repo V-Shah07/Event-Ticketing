@@ -37,6 +37,7 @@ type Service struct {
 	idempo    *idempotencyStore
 	inv       *inventory.Cache
 	publisher events.Publisher // optional analytics sink (gRPC + Kafka)
+	issuer    TicketIssuer     // optional QR issuer
 }
 
 func NewService(pool *pgxpool.Pool, rdb *redis.Client, provider Provider) *Service {
@@ -52,6 +53,15 @@ func NewService(pool *pgxpool.Pool, rdb *redis.Client, provider Provider) *Servi
 // SetPublisher attaches an analytics publisher, invoked best-effort after each
 // committed purchase. Nil is fine (analytics simply isn't fed).
 func (s *Service) SetPublisher(p events.Publisher) { s.publisher = p }
+
+// TicketIssuer generates signed QR tokens + PNGs for a committed purchase's
+// tickets. Implemented by the ticket package.
+type TicketIssuer interface {
+	IssueForPurchase(ctx context.Context, purchaseID string) error
+}
+
+// SetTicketIssuer attaches a QR issuer, invoked best-effort after commit.
+func (s *Service) SetTicketIssuer(t TicketIssuer) { s.issuer = t }
 
 type CheckoutInput struct {
 	TierID   string `json:"tier_id"`
@@ -141,12 +151,19 @@ func (s *Service) ProcessPaymentSucceeded(ctx context.Context, intentID string) 
 	}
 	_ = s.idempo.markDone(ctx, intentID)
 
-	// Best-effort analytics publish AFTER commit — never on the critical path's
-	// correctness. A failure here does not fail the webhook.
-	if res.Created && s.publisher != nil {
-		if err := s.publisher.PublishPurchase(ctx, purchase); err != nil {
-			// Swallow: analytics is allowed to lag/miss without hurting checkout.
-			_ = err
+	if res.Created {
+		// Generate signed QR tokens + PNGs for the freshly minted tickets.
+		if s.issuer != nil {
+			if err := s.issuer.IssueForPurchase(ctx, purchase.PurchaseID); err != nil {
+				_ = err // best-effort; tickets still exist and can be re-issued
+			}
+		}
+		// Best-effort analytics publish AFTER commit — never on the critical
+		// path's correctness. A failure here does not fail the webhook.
+		if s.publisher != nil {
+			if err := s.publisher.PublishPurchase(ctx, purchase); err != nil {
+				_ = err // analytics may lag/miss without hurting checkout
+			}
 		}
 	}
 	return res, nil
