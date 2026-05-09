@@ -1,0 +1,6 @@
+=== RUN   TestExactlyOnceEntry
+2026/07/20 01:14:00 ticket c8319d12-5bd7-46f6-a043-161b55d486c6: QR issued -> link=/tickets/c8319d12-5bd7-46f6-a043-161b55d486c6/qr.png
+    validation_concurrency_test.go:113: PASS Phase5: 1 QR at 50 concurrent scanners -> admitted=1 already_scanned=49 other=0, ticket marked "scanned"
+--- PASS: TestExactlyOnceEntry (0.23s)
+PASS
+ok  	github.com/v-shah07/event-ticketing/internal/ticket	0.241s
