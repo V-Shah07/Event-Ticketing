@@ -1,0 +1,5 @@
+=== RUN   TestLiveDashboardLatency
+    ws_latency_test.go:144: PASS Phase6: 50 purchases -> WebSocket received matching live totals (tickets_sold=50 revenue_cents=150000). End-to-end latency payment->WS: avg=5.0ms max=74.3ms
+--- PASS: TestLiveDashboardLatency (4.69s)
+PASS
+ok  	github.com/v-shah07/event-ticketing/internal/dashboard	4.696s
