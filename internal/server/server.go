@@ -12,6 +12,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/v-shah07/event-ticketing/internal/auth"
 	"github.com/v-shah07/event-ticketing/internal/dashboard"
+	"github.com/v-shah07/event-ticketing/internal/discovery"
 	"github.com/v-shah07/event-ticketing/internal/event"
 	"github.com/v-shah07/event-ticketing/internal/inventory"
 	"github.com/v-shah07/event-ticketing/internal/payment"
@@ -88,6 +89,10 @@ func New(d Deps) http.Handler {
 		wsH := dashboard.NewHandler(d.DashboardHub)
 		r.Get("/ws/events/{eventID}", wsH.Subscribe)
 	}
+
+	// GraphQL discovery API (reads) + interactive playground.
+	r.Handle("/graphql", discovery.NewGraphQLHandler(d.Pool, d.Redis))
+	r.Handle("/playground", discovery.Playground())
 
 	return r
 }

@@ -1,0 +1,214 @@
+{{- range $object := .Objects }}{{- range $field := $object.Fields }}
+
+func {{$.FuncReceiver}}_{{$object.Name}}_{{$field.Name}}(ctx context.Context, {{$.ECFuncParam}}field graphql.CollectedField{{ if not $object.Root }}, obj {{$object.Reference | ref}}{{end}}) (ret {{ $field.MarshalerReturnType }}) {
+	{{- $null := "graphql.Null" }}
+	{{- if $object.Stream }}
+		{{- $null = "nil" }}
+	{{- end }}
+
+	{{- if $field.TypeReference.IsRoot }}
+		fc, err := {{$.ECDot}}{{ $field.FieldContextFunc }}(ctx, {{$.ECArg}}field)
+		if err != nil {
+			return {{- if $field.UsesSubscriptionContext }} ctx,{{- end}} {{ $null }}
+		}
+		ctx = graphql.WithFieldContext(ctx, fc)
+		{{- if not $.Config.OmitPanicHandler }}
+		defer func () {
+			if r := recover(); r != nil {
+				ec.Error(ctx, ec.Recover(ctx, r))
+				ret = {{ $null }}
+			}
+		}()
+		{{- end }}
+
+		{{- if $field.TypeReference.IsPtr }}
+			res := &{{ $field.TypeReference.Elem.GO | ref }}{}
+		{{- else }}
+			res := {{ $field.TypeReference.GO | ref }}{}
+		{{- end }}
+		fc.Result = res
+		return {{$.ECDot}}{{ $field.TypeReference.MarshalFunc }}(ctx, {{$.ECArg}}field.Selections, res)
+	{{- else}}
+		return graphql.{{ $field.ResolveFieldFunc }}(
+			ctx,
+			ec.OperationContext,
+			field,
+			func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) { return {{$.ECDot}}{{ $field.FieldContextFunc }}(ctx, {{$.ECArg}}field) },
+			func(ctx context.Context) (any, error) {
+				{{- template "fieldDefinition" $field }}
+			},
+			{{if or ($.AllDirectives.LocationDirectives "FIELD") $field.HasDirectives -}}
+			func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+				{{- if $field.HasDirectives -}}
+				directive0 := next
+				{{ template "implDirectives" ($.ImplDirectivesCtx $field) }}
+				next = directive{{$field.ImplDirectives|len}}
+				{{end}}
+				{{- if  $.AllDirectives.LocationDirectives "FIELD" -}}
+						return {{$.ECDot}}_fieldMiddleware(ctx, {{$.ECArg}}{{if $object.Root}}nil{{else}}obj{{end}}, next)
+				{{- else -}}
+				return next
+				{{end -}}
+			},
+			{{else -}}
+		    nil,
+			{{end -}}
+			func(ctx context.Context, selections ast.SelectionSet, v {{ $field.TypeReference.GO | ref }}) graphql.Marshaler { return {{$.ECDot}}{{ $field.TypeReference.MarshalFunc }}(ctx, {{$.ECArg}}selections, v) },
+			{{ not $.Config.OmitPanicHandler }},
+			{{ $field.TypeReference.GQL.NonNull }},
+		)
+	{{- end }}
+}
+
+{{- /* Scalar/enum fields without args: use graphql.NewScalarFieldContext (saves ~8 lines per field) */ -}}
+{{- if and (not $field.Args) (not $field.TypeReference.Definition.Fields) }}
+func {{$.FuncReceiver}}{{ $field.FieldContextFunc }}(_ context.Context, {{$.ECFuncParam}}field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext({{quote $field.Object.Name}}, field, {{or $field.IsMethod $field.IsResolver}}, {{ $field.IsResolver }}, errors.New("field of type {{ $field.TypeReference.Definition.Name }} does not have child fields"))
+}
+{{- else }}
+func {{$.FuncReceiver}}{{ $field.FieldContextFunc }}({{ if not $field.Args }}_{{ else }}ctx{{ end }} context.Context, {{$.ECFuncParam}}field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object: {{quote $field.Object.Name}},
+		Field: field,
+		IsMethod: {{or $field.IsMethod $field.IsResolver}},
+		IsResolver: {{ $field.IsResolver }},
+		Child: func (ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			{{- if not $field.TypeReference.Definition.Fields }}
+				return nil, errors.New("field of type {{ $field.TypeReference.Definition.Name }} does not have child fields")
+			{{- else if ne $field.TypeReference.Definition.Kind "OBJECT" }}
+				return nil, errors.New("FieldContext.Child cannot be called on type {{ $field.TypeReference.Definition.Kind }}")
+			{{- else }}
+				return {{$.ECDot}}childFields_{{ $field.ChildFieldContextTypeName }}(ctx, {{$.ECArg}}field)
+			{{- end }}
+		},
+	}
+	{{- if $field.Args }}
+		{{- if not $.Config.OmitPanicHandler }}
+		defer func () {
+			if r := recover(); r != nil {
+				err = ec.Recover(ctx, r)
+				ec.Error(ctx, err)
+			}
+		}()
+		{{- end }}
+		ctx = graphql.WithFieldContext(ctx, fc)
+		if fc.Args, err = {{$.ECDot}}{{ $field.ArgsFunc }}(ctx, {{$.ECArg}}field.ArgumentMap(ec.Variables)); err != nil {
+			ec.Error(ctx, err)
+			return fc, err
+		}
+	{{- end }}
+	return fc, nil
+}
+{{- end }}
+
+{{- if and $field.IsBatch (not $object.Root) }}
+func (ec *executionContext) resolveBatch_{{$object.Name}}_{{$field.Name}}(ctx context.Context, field graphql.CollectedField, obj {{$object.Reference | ref}}) (any, error) {
+	resolver := ec.Resolvers.{{ ucFirst $object.Name }}()
+	{{- if $field.BatchUsesFieldContextArgs }}
+	fc := graphql.GetFieldContext(ctx)
+	{{- end }}
+	group := graphql.GetBatchParentGroup(ctx, {{ $object.Name | quote }})
+	if group != nil {
+		parents, ok := group.Parents.([]{{$object.Reference | ref}})
+		if ok {
+			idx, ok := graphql.BatchParentIndex(ctx)
+			if ok {
+				key := field.Alias
+				if key == "" {
+					key = field.Name
+				}
+				{{/* TODO: resolveBatch_* runs per parent even when grouped; consider a single
+				dispatch per field if the execution flow can support it. */ -}}
+				result := group.GetFieldResult(key, func() (any, error) {
+					{{- if $field.HasFederationRequiresArg }}
+					federationRequires, err := graphql.FederationRequiresForBatch(ctx, len(parents), group.IndexMap)
+					if err != nil {
+						return nil, err
+					}
+					{{- end }}
+					return resolver.{{ $field.GoFieldName }}({{ if $field.HasFederationRequiresArg }}{{ $field.BatchCallArgs "parents" "federationRequires" }}{{ else }}{{ $field.BatchCallArgs "parents" "" }}{{ end }})
+				})
+				return graphql.ResolveBatchGroupResult[{{ $field.TypeReference.GO | ref }}](
+					ctx,
+					idx,
+					len(parents),
+					result,
+					{{ printf "%s.%s" $object.Name $field.Name | quote }},
+					group.IndexMap,
+				)
+			}
+		}
+	}
+{{- if $field.HasFederationRequiresArg }}
+	federationRequires, err := graphql.FederationRequiresForBatch(ctx, 1, nil)
+	if err != nil {
+		return nil, err
+	}
+	results, err := resolver.{{ $field.GoFieldName }}({{ $field.BatchCallArgs (printf "[]%s{obj}" ($object.Reference | ref)) "federationRequires" }})
+	{{- else }}
+	results, err := resolver.{{ $field.GoFieldName }}({{ $field.BatchCallArgs (printf "[]%s{obj}" ($object.Reference | ref)) "" }})
+	{{- end }}
+	return graphql.ResolveBatchSingleResult[{{ $field.TypeReference.GO | ref }}](
+		ctx,
+		results,
+		err,
+		{{ printf "%s.%s" $object.Name $field.Name | quote }},
+	)
+}
+{{- end }}
+
+{{- end }}{{- end}}
+
+{{ define "fieldDefinition" }}
+	{{- if and .IsBatch (not .Object.Root) }}
+		return ec.resolveBatch_{{ .Object.Name }}_{{ .Name }}(ctx, field, obj)
+	{{- else }}
+		{{- template "singleFieldDefinition" . }}
+	{{- end }}
+{{- end }}
+
+{{ define "singleFieldDefinition" }}
+	{{- if or .IsResolver .IsMethod -}}
+	{{- if gt (len .Args) 0 -}}
+	fc := graphql.GetFieldContext(ctx)
+	{{- end }}
+	{{ end }}
+	{{- if .IsResolver -}}
+		return ec.Resolvers.{{ .ShortInvocation }}
+	{{- else if .IsMap -}}
+		switch v := {{.GoReceiverName}}[{{.Name|quote}}].(type) {
+		case {{if .Stream}}<-chan {{end}}{{.TypeReference.GO | ref}}:
+			return v, nil
+		case {{if .Stream}}<-chan {{end}}{{.TypeReference.Elem.GO | ref}}:
+			return &v, nil
+		case nil:
+			return ({{.TypeReference.GO | ref}})(nil), nil
+		default:
+			return nil, fmt.Errorf("unexpected type %T for field %s", v, {{ .Name | quote}})
+		}
+	{{- else if .IsMethod -}}
+		{{- if .HasHaser -}}
+		if !{{.GoReceiverName}}.{{.HaserMethodName}}() {
+			return nil, nil
+		}
+		{{ end }}
+		{{- if .VOkFunc -}}
+			v, ok := {{.GoReceiverName}}.{{.GoFieldName}}({{ .CallArgs }})
+			if !ok {
+				return nil, nil
+			}
+			return v, nil
+		{{- else if .NoErr -}}
+			return {{.GoReceiverName}}.{{.GoFieldName}}({{ .CallArgs }}), nil
+		{{- else -}}
+			return {{.GoReceiverName}}.{{.GoFieldName}}({{ .CallArgs }})
+		{{- end -}}
+	{{- else if .IsVariable -}}
+		{{- if .HasHaser -}}
+		if !{{.GoReceiverName}}.{{.HaserMethodName}}() {
+			return nil, nil
+		}
+		{{- end -}}
+		return {{.GoReceiverName}}.{{.GoFieldName}}, nil
+	{{- end }}
+	{{- end }}
