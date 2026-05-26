@@ -23,7 +23,7 @@ tests that deliberately try to break them.
 | 4 | gRPC + Protobuf analytics service | ✅ |
 | 5 | QR generation + Redis `SETNX` exactly-once entry | ✅ |
 | 6 | Kafka analytics + WebSocket live dashboard | ✅ |
-| 7 | GraphQL discovery + PostGIS geo search | ⏳ |
+| 7 | GraphQL discovery + PostGIS geo search | ✅ |
 | 8 | IaC (Terraform/K8s, unapplied) + rate limiter | ⏳ |
 | 9 | Thin React dashboard (sacrificial) | ⏳ |
 
