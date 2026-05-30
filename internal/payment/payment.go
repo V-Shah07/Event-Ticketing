@@ -31,22 +31,31 @@ var (
 )
 
 type Service struct {
-	pool      *pgxpool.Pool
-	rdb       *redis.Client
-	provider  Provider
-	idempo    *idempotencyStore
-	inv       *inventory.Cache
-	publisher events.Publisher // optional analytics sink (gRPC + Kafka)
-	issuer    TicketIssuer     // optional QR issuer
+	pool        *pgxpool.Pool
+	rdb         *redis.Client
+	provider    Provider
+	idempo      *idempotencyStore
+	inv         *inventory.Cache
+	publisher   events.Publisher // optional analytics sink (gRPC + Kafka)
+	issuer      TicketIssuer     // optional QR issuer
+	purchaseCap int              // max tickets a buyer may hold per event
 }
 
 func NewService(pool *pgxpool.Pool, rdb *redis.Client, provider Provider) *Service {
 	return &Service{
-		pool:     pool,
-		rdb:      rdb,
-		provider: provider,
-		idempo:   newIdempotencyStore(rdb),
-		inv:      inventory.NewCache(pool, rdb),
+		pool:        pool,
+		rdb:         rdb,
+		provider:    provider,
+		idempo:      newIdempotencyStore(rdb),
+		inv:         inventory.NewCache(pool, rdb),
+		purchaseCap: 10,
+	}
+}
+
+// SetPurchaseCap sets the per-buyer, per-event ticket cap (anti-hoarding).
+func (s *Service) SetPurchaseCap(n int) {
+	if n > 0 {
+		s.purchaseCap = n
 	}
 }
 
@@ -93,6 +102,19 @@ func (s *Service) Checkout(ctx context.Context, buyerID string, in CheckoutInput
 	}
 	if err != nil {
 		return nil, err
+	}
+
+	// Per-event purchase cap: prevent a single buyer from hoarding a tier.
+	var held int
+	if err := s.pool.QueryRow(ctx, `
+		SELECT COALESCE(SUM(quantity),0) FROM purchases
+		WHERE buyer_id=$1 AND event_id=$2 AND status IN ('pending','completed')`,
+		buyerID, eventID,
+	).Scan(&held); err != nil {
+		return nil, err
+	}
+	if held+in.Quantity > s.purchaseCap {
+		return nil, fmt.Errorf("per-event purchase cap reached (max %d per buyer)", s.purchaseCap)
 	}
 
 	amount := priceCents * int64(in.Quantity)

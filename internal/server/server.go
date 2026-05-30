@@ -16,6 +16,7 @@ import (
 	"github.com/v-shah07/event-ticketing/internal/event"
 	"github.com/v-shah07/event-ticketing/internal/inventory"
 	"github.com/v-shah07/event-ticketing/internal/payment"
+	"github.com/v-shah07/event-ticketing/internal/ratelimit"
 	"github.com/v-shah07/event-ticketing/internal/ticket"
 	"github.com/v-shah07/event-ticketing/internal/user"
 )
@@ -29,6 +30,7 @@ type Deps struct {
 	TicketSigner  ticket.Signer
 	QRDir         string
 	DashboardHub  *dashboard.Hub
+	CheckoutLimit *ratelimit.Limiter
 }
 
 func New(d Deps) http.Handler {
@@ -74,6 +76,10 @@ func New(d Deps) http.Handler {
 		payH := payment.NewHandler(d.Payments, d.StripeWebhKey)
 		r.Group(func(r chi.Router) {
 			r.Use(d.JWT.Middleware)
+			// Rate-limit checkout per IP + per user (sliding window).
+			if d.CheckoutLimit != nil {
+				r.Use(d.CheckoutLimit.Middleware)
+			}
 			r.Post("/checkout", payH.Checkout)
 		})
 		r.Post("/webhooks/stripe", payH.Webhook)
