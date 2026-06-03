@@ -27,3 +27,11 @@ up:
 
 down:
 	docker compose down
+
+# Validate the (never-applied) infrastructure manifests.
+infra-validate:
+	terraform -chdir=infra/terraform init -backend=false -input=false
+	terraform -chdir=infra/terraform validate
+	kubeconform -strict -summary infra/k8s/*.yaml
+	helm lint infra/helm/event-ticketing
+	helm template et infra/helm/event-ticketing | kubeconform -strict -summary

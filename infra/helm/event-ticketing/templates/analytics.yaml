@@ -1,0 +1,62 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-analytics
+  labels:
+    {{- include "event-ticketing.labels" . | nindent 4 }}
+    app: analytics
+spec:
+  replicas: {{ .Values.analytics.replicas }}
+  selector:
+    matchLabels:
+      app: analytics
+  template:
+    metadata:
+      labels:
+        app: analytics
+    spec:
+      containers:
+        - name: analytics
+          image: "{{ .Values.analytics.image.repository }}:{{ .Values.analytics.image.tag }}"
+          ports:
+            - containerPort: {{ .Values.analytics.port }}
+              name: grpc
+          resources:
+            {{- toYaml .Values.analytics.resources | nindent 12 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-analytics
+  labels:
+    {{- include "event-ticketing.labels" . | nindent 4 }}
+spec:
+  selector:
+    app: analytics
+  ports:
+    - name: grpc
+      port: {{ .Values.analytics.port }}
+      targetPort: {{ .Values.analytics.port }}
+{{- if .Values.analytics.autoscaling.enabled }}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ .Release.Name }}-analytics
+  labels:
+    {{- include "event-ticketing.labels" . | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ .Release.Name }}-analytics
+  minReplicas: {{ .Values.analytics.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.analytics.autoscaling.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.analytics.autoscaling.targetCPUUtilizationPercentage }}
+{{- end }}

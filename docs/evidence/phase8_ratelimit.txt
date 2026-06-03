@@ -1,0 +1,8 @@
+=== RUN   TestSlidingWindowRejectsOverLimit
+    ratelimit_test.go:61: PASS Phase8: sliding window admitted 10/10, rejected the 11th, admitted again after window
+--- PASS: TestSlidingWindowRejectsOverLimit (0.60s)
+=== RUN   TestMiddlewareReturns429
+    ratelimit_test.go:97: PASS Phase8: HTTP middleware allowed 5 then returned 429 for the next 3
+--- PASS: TestMiddlewareReturns429 (0.01s)
+PASS
+ok  	github.com/v-shah07/event-ticketing/internal/ratelimit	0.616s
