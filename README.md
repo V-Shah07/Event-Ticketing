@@ -25,7 +25,7 @@ tests that deliberately try to break them.
 | 6 | Kafka analytics + WebSocket live dashboard | ✅ |
 | 7 | GraphQL discovery + PostGIS geo search | ✅ |
 | 8 | IaC (Terraform/K8s, unapplied) + rate limiter | ✅ |
-| 9 | Thin React dashboard (sacrificial) | ⏳ |
+| 9 | Thin React dashboard (sacrificial) | ✅ |
 
 ## Quick start
 
@@ -118,6 +118,17 @@ go test ./... -v
 
 Test evidence for each phase's **PROVE IT** step is committed under
 [`docs/evidence/`](docs/evidence/).
+
+## Frontend (thin dashboard)
+
+A minimal **React + TypeScript + Vite** dashboard lives in
+[`frontend/`](frontend): event list, a checkout flow (against Stripe test mode /
+the mock provider), and the **live organizer dashboard over WebSocket**. It is
+intentionally thin — the backend is the story.
+
+```bash
+cd frontend && npm install && npm run dev   # proxies /api + /ws to :8080
+```
 
 ## Infrastructure (written & validated, deployed via Compose)
 
