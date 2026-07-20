@@ -1,0 +1,10 @@
+name: diag
+on:
+  push:
+    branches: ["**"]
+  workflow_dispatch:
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "diag ok - workflow started, no external actions used"
