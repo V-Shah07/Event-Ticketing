@@ -1,0 +1,7 @@
+=== RUN   TestGraphQLDiscoveryAndPostGIS
+    graphql_postgis_test.go:88: Part1 OK: 4-dim filter (category+date+price+location) returned exactly the target event
+    graphql_postgis_test.go:120: Part2 OK: geo radius query returned 300 events ordered by distance (nearest=33.3m farthest=9982.7m)
+    graphql_postgis_test.go:134: PASS Phase7: GraphQL 4-dim filter correct; PostGIS geo query over Z=300 events ordered by distance. Latency p50=28.3ms p99=41.6ms over 200 runs
+--- PASS: TestGraphQLDiscoveryAndPostGIS (6.64s)
+PASS
+ok  	github.com/v-shah07/event-ticketing/internal/discovery	6.646s
