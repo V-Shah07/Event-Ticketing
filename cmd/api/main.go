@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/v-shah07/event-ticketing/internal/analytics"
 	"github.com/v-shah07/event-ticketing/internal/auth"
 	"github.com/v-shah07/event-ticketing/internal/cache"
 	"github.com/v-shah07/event-ticketing/internal/config"
@@ -52,6 +53,16 @@ func main() {
 		log.Println("payments: STRIPE_SECRET_KEY unset, using mock provider")
 	}
 	payments := payment.NewService(pool, rdb, provider)
+
+	// Connect to the analytics service over gRPC (best-effort; core still works
+	// if analytics is down). Purchases are streamed to it after commit.
+	if analyticsClient, err := analytics.Dial(cfg.AnalyticsAddr); err != nil {
+		log.Printf("analytics dial failed (%v); analytics disabled", err)
+	} else {
+		defer analyticsClient.Close()
+		payments.SetPublisher(analyticsClient)
+		log.Printf("analytics client connected to %s", cfg.AnalyticsAddr)
+	}
 
 	handler := server.New(server.Deps{
 		Pool:          pool,

@@ -13,10 +13,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
+	"github.com/v-shah07/event-ticketing/internal/events"
 	"github.com/v-shah07/event-ticketing/internal/inventory"
 )
 
@@ -29,11 +31,12 @@ var (
 )
 
 type Service struct {
-	pool     *pgxpool.Pool
-	rdb      *redis.Client
-	provider Provider
-	idempo   *idempotencyStore
-	inv      *inventory.Cache
+	pool      *pgxpool.Pool
+	rdb       *redis.Client
+	provider  Provider
+	idempo    *idempotencyStore
+	inv       *inventory.Cache
+	publisher events.Publisher // optional analytics sink (gRPC + Kafka)
 }
 
 func NewService(pool *pgxpool.Pool, rdb *redis.Client, provider Provider) *Service {
@@ -45,6 +48,10 @@ func NewService(pool *pgxpool.Pool, rdb *redis.Client, provider Provider) *Servi
 		inv:      inventory.NewCache(pool, rdb),
 	}
 }
+
+// SetPublisher attaches an analytics publisher, invoked best-effort after each
+// committed purchase. Nil is fine (analytics simply isn't fed).
+func (s *Service) SetPublisher(p events.Publisher) { s.publisher = p }
 
 type CheckoutInput struct {
 	TierID   string `json:"tier_id"`
@@ -126,40 +133,50 @@ func (s *Service) ProcessPaymentSucceeded(ctx context.Context, intentID string) 
 	}
 	// If Redis errored we don't give up — the DB layer below is authoritative.
 
-	res, procErr := s.processInTx(ctx, intentID)
+	res, purchase, procErr := s.processInTx(ctx, intentID)
 	if procErr != nil {
 		// Let a future retry reprocess this intent.
 		s.idempo.release(ctx, intentID)
 		return ProcessResult{}, procErr
 	}
 	_ = s.idempo.markDone(ctx, intentID)
+
+	// Best-effort analytics publish AFTER commit — never on the critical path's
+	// correctness. A failure here does not fail the webhook.
+	if res.Created && s.publisher != nil {
+		if err := s.publisher.PublishPurchase(ctx, purchase); err != nil {
+			// Swallow: analytics is allowed to lag/miss without hurting checkout.
+			_ = err
+		}
+	}
 	return res, nil
 }
 
-func (s *Service) processInTx(ctx context.Context, intentID string) (ProcessResult, error) {
+func (s *Service) processInTx(ctx context.Context, intentID string) (ProcessResult, events.Purchase, error) {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
-		return ProcessResult{}, err
+		return ProcessResult{}, events.Purchase{}, err
 	}
 	defer tx.Rollback(ctx)
 
 	// Layer 2: lock the purchase row. Concurrent processors serialize here.
 	var purchaseID, tierID, eventID, buyerID, status string
 	var quantity int
+	var amountCents int64
 	err = tx.QueryRow(ctx, `
-		SELECT id, tier_id, event_id, buyer_id, status, quantity
+		SELECT id, tier_id, event_id, buyer_id, status, quantity, amount_cents
 		FROM purchases WHERE stripe_payment_intent_id=$1 FOR UPDATE`, intentID,
-	).Scan(&purchaseID, &tierID, &eventID, &buyerID, &status, &quantity)
+	).Scan(&purchaseID, &tierID, &eventID, &buyerID, &status, &quantity, &amountCents)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return ProcessResult{}, ErrPurchaseNotFound
+		return ProcessResult{}, events.Purchase{}, ErrPurchaseNotFound
 	}
 	if err != nil {
-		return ProcessResult{}, err
+		return ProcessResult{}, events.Purchase{}, err
 	}
 
 	// Authoritative idempotency: already completed => do nothing.
 	if status == "completed" {
-		return ProcessResult{AlreadyDone: true}, nil
+		return ProcessResult{AlreadyDone: true}, events.Purchase{}, nil
 	}
 
 	// Lock the tier row and enforce capacity (Phase 3 leans on this too).
@@ -168,16 +185,16 @@ func (s *Service) processInTx(ctx context.Context, intentID string) (ProcessResu
 		`SELECT capacity, sold FROM ticket_tiers WHERE id=$1 FOR UPDATE`, tierID,
 	).Scan(&capacity, &sold)
 	if err != nil {
-		return ProcessResult{}, err
+		return ProcessResult{}, events.Purchase{}, err
 	}
 	if sold+quantity > capacity {
 		if _, err = tx.Exec(ctx, `UPDATE purchases SET status='failed' WHERE id=$1`, purchaseID); err != nil {
-			return ProcessResult{}, err
+			return ProcessResult{}, events.Purchase{}, err
 		}
 		if err = tx.Commit(ctx); err != nil {
-			return ProcessResult{}, err
+			return ProcessResult{}, events.Purchase{}, err
 		}
-		return ProcessResult{}, ErrSoldOut
+		return ProcessResult{}, events.Purchase{}, ErrSoldOut
 	}
 
 	for i := 0; i < quantity; i++ {
@@ -185,25 +202,34 @@ func (s *Service) processInTx(ctx context.Context, intentID string) (ProcessResu
 			INSERT INTO tickets (tier_id, event_id, buyer_id, purchase_id, status)
 			VALUES ($1,$2,$3,$4,'valid')`,
 			tierID, eventID, buyerID, purchaseID); err != nil {
-			return ProcessResult{}, err
+			return ProcessResult{}, events.Purchase{}, err
 		}
 	}
 
 	if _, err = tx.Exec(ctx,
 		`UPDATE ticket_tiers SET sold = sold + $1 WHERE id=$2`, quantity, tierID); err != nil {
-		return ProcessResult{}, err
+		return ProcessResult{}, events.Purchase{}, err
 	}
 	if _, err = tx.Exec(ctx,
 		`UPDATE purchases SET status='completed' WHERE id=$1`, purchaseID); err != nil {
-		return ProcessResult{}, err
+		return ProcessResult{}, events.Purchase{}, err
 	}
 
 	if err = tx.Commit(ctx); err != nil {
-		return ProcessResult{}, err
+		return ProcessResult{}, events.Purchase{}, err
 	}
 
 	// Inventory changed: drop the cached count so reads recompute (Phase 3).
 	s.inv.Invalidate(ctx, tierID)
 
-	return ProcessResult{Created: true, TicketsMinted: quantity}, nil
+	purchase := events.Purchase{
+		PurchaseID:  purchaseID,
+		EventID:     eventID,
+		TierID:      tierID,
+		BuyerID:     buyerID,
+		AmountCents: amountCents,
+		Quantity:    quantity,
+		OccurredAt:  time.Now(),
+	}
+	return ProcessResult{Created: true, TicketsMinted: quantity}, purchase, nil
 }
