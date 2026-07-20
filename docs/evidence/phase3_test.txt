@@ -1,0 +1,5 @@
+=== RUN   TestNoOversell100Buyers1Ticket
+    oversell_concurrency_test.go:139: PASS Phase3: 100 concurrent buyers, capacity=1 -> success=1 sold_out=99 tickets=1 remaining=0 min_inventory_observed=0 (never negative)
+--- PASS: TestNoOversell100Buyers1Ticket (7.32s)
+PASS
+ok  	github.com/v-shah07/event-ticketing/internal/inventory	7.333s

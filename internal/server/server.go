@@ -12,6 +12,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/v-shah07/event-ticketing/internal/auth"
 	"github.com/v-shah07/event-ticketing/internal/event"
+	"github.com/v-shah07/event-ticketing/internal/inventory"
 	"github.com/v-shah07/event-ticketing/internal/payment"
 	"github.com/v-shah07/event-ticketing/internal/user"
 )
@@ -41,6 +42,7 @@ func New(d Deps) http.Handler {
 	r.Post("/auth/login", userH.Login)
 
 	eventH := event.NewHandler(event.NewStore(d.Pool))
+	invH := inventory.NewHandler(inventory.NewCache(d.Pool, d.Redis))
 
 	// Events: reads are public, writes require a valid token (role enforced inside).
 	r.Route("/events", func(r chi.Router) {
@@ -50,6 +52,8 @@ func New(d Deps) http.Handler {
 			r.Get("/", eventH.List)
 			r.Get("/{id}", eventH.Get)
 		})
+		// Cached live inventory for a tier.
+		r.Get("/tiers/{tierID}/inventory", invH.Remaining)
 		r.Group(func(r chi.Router) {
 			r.Use(d.JWT.Middleware)
 			r.Use(auth.RequireRole(auth.RoleOrganizer, auth.RoleAdmin))
