@@ -118,3 +118,16 @@ jobs:
         run: |
           helm lint infra/helm/event-ticketing
           helm template et infra/helm/event-ticketing | kubeconform -strict -summary
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Build thin dashboard
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
