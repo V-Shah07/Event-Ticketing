@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"github.com/v-shah07/event-ticketing/internal/auth"
+	"github.com/v-shah07/event-ticketing/internal/dashboard"
 	"github.com/v-shah07/event-ticketing/internal/event"
 	"github.com/v-shah07/event-ticketing/internal/inventory"
 	"github.com/v-shah07/event-ticketing/internal/payment"
@@ -26,6 +27,7 @@ type Deps struct {
 	StripeWebhKey string
 	TicketSigner  ticket.Signer
 	QRDir         string
+	DashboardHub  *dashboard.Hub
 }
 
 func New(d Deps) http.Handler {
@@ -80,6 +82,12 @@ func New(d Deps) http.Handler {
 	ticketH := ticket.NewHandler(ticket.NewValidator(d.Pool, d.Redis, d.TicketSigner), d.QRDir)
 	r.Post("/tickets/validate", ticketH.Validate)
 	r.Get("/tickets/{id}/qr.png", ticketH.QR)
+
+	// Live organizer dashboard over WebSocket.
+	if d.DashboardHub != nil {
+		wsH := dashboard.NewHandler(d.DashboardHub)
+		r.Get("/ws/events/{eventID}", wsH.Subscribe)
+	}
 
 	return r
 }

@@ -6,6 +6,8 @@ package testsupport
 import (
 	"context"
 	"fmt"
+	"net"
+	"os"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -52,6 +54,22 @@ func UniqueEmail(prefix string) string {
 }
 
 var emailCounter int64
+
+// KafkaBrokers returns the configured brokers, skipping the test if the broker
+// is unreachable.
+func KafkaBrokers(t *testing.T) []string {
+	t.Helper()
+	addr := os.Getenv("KAFKA_BROKERS")
+	if addr == "" {
+		addr = "localhost:9092"
+	}
+	conn, err := net.DialTimeout("tcp", addr, 2*time.Second)
+	if err != nil {
+		t.Skipf("kafka unavailable at %s (%v); skipping", addr, err)
+	}
+	conn.Close()
+	return []string{addr}
+}
 
 // Truncate clears all mutable tables so each test starts clean.
 func Truncate(t *testing.T, pool *pgxpool.Pool) {

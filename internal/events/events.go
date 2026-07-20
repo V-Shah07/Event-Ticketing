@@ -24,3 +24,17 @@ type Purchase struct {
 type Publisher interface {
 	PublishPurchase(ctx context.Context, p Purchase) error
 }
+
+// MultiPublisher fans a purchase out to several publishers (e.g. gRPC analytics
+// and Kafka). Individual failures are collected but never abort the others.
+type MultiPublisher []Publisher
+
+func (m MultiPublisher) PublishPurchase(ctx context.Context, p Purchase) error {
+	var firstErr error
+	for _, pub := range m {
+		if err := pub.PublishPurchase(ctx, p); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	return firstErr
+}
