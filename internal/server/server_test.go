@@ -16,7 +16,6 @@ import (
 // an event with a valid JWT, and list it back over REST.
 func TestEventCRUDWithJWT(t *testing.T) {
 	pool := testsupport.Pool(t)
-	testsupport.Truncate(t, pool)
 	rdb := testsupport.Redis(t)
 
 	h := server.New(server.Deps{Pool: pool, Redis: rdb, JWT: auth.NewManager("test-secret")})
@@ -24,7 +23,7 @@ func TestEventCRUDWithJWT(t *testing.T) {
 	defer srv.Close()
 
 	// Register organizer.
-	token, _ := registerUser(t, srv.URL, "organizer1@example.com", "hunter2", "organizer")
+	token, _ := registerUser(t, srv.URL, testsupport.UniqueEmail("organizer1"), "hunter2", "organizer")
 
 	// Create an event.
 	body := `{"title":"Spring Fest","description":"live music","category":"music","venue":"Klaus"}`
@@ -88,7 +87,6 @@ func TestEventCRUDWithJWT(t *testing.T) {
 // TestUnauthenticatedCannotCreate verifies JWT enforcement on writes.
 func TestUnauthenticatedCannotCreate(t *testing.T) {
 	pool := testsupport.Pool(t)
-	testsupport.Truncate(t, pool)
 	rdb := testsupport.Redis(t)
 
 	h := server.New(server.Deps{Pool: pool, Redis: rdb, JWT: auth.NewManager("test-secret")})
@@ -105,7 +103,7 @@ func TestUnauthenticatedCannotCreate(t *testing.T) {
 	}
 
 	// A buyer token must be forbidden from creating events.
-	buyerTok, _ := registerUser(t, srv.URL, "buyer1@example.com", "hunter2", "buyer")
+	buyerTok, _ := registerUser(t, srv.URL, testsupport.UniqueEmail("buyer1"), "hunter2", "buyer")
 	req, _ := http.NewRequest("POST", srv.URL+"/events", bytes.NewBufferString(`{"title":"x"}`))
 	req.Header.Set("Authorization", "Bearer "+buyerTok)
 	bResp, _ := http.DefaultClient.Do(req)

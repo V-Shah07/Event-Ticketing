@@ -5,7 +5,10 @@ package testsupport
 
 import (
 	"context"
+	"fmt"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
@@ -29,7 +32,9 @@ func Pool(t *testing.T) *pgxpool.Pool {
 	return pool
 }
 
-// Redis returns a flushed Redis client, skipping the test if unreachable.
+// Redis returns a Redis client, skipping the test if unreachable. It does not
+// flush the DB: tests use unique keys/IDs so they can run concurrently across
+// packages against a shared Redis without stepping on each other.
 func Redis(t *testing.T) *redis.Client {
 	t.Helper()
 	cfg := config.Load()
@@ -37,11 +42,16 @@ func Redis(t *testing.T) *redis.Client {
 	if err != nil {
 		t.Skipf("redis unavailable (%v); skipping integration test", err)
 	}
-	if err := rdb.FlushDB(context.Background()).Err(); err != nil {
-		t.Fatalf("flush redis: %v", err)
-	}
 	return rdb
 }
+
+// UniqueEmail returns a collision-free email for test registrations so suites
+// are safe to re-run against a persistent database.
+func UniqueEmail(prefix string) string {
+	return fmt.Sprintf("%s-%d-%d@example.com", prefix, time.Now().UnixNano(), atomic.AddInt64(&emailCounter, 1))
+}
+
+var emailCounter int64
 
 // Truncate clears all mutable tables so each test starts clean.
 func Truncate(t *testing.T, pool *pgxpool.Pool) {
