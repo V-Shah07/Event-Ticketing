@@ -26,6 +26,20 @@ services:
       timeout: 3s
       retries: 20
 
+  analytics:
+    build:
+      context: .
+      args:
+        TARGET: ./cmd/analytics
+    environment:
+      REDIS_ADDR: redis:6379
+      GRPC_ADDR: ":9100"
+    ports:
+      - "9100:9100"
+    depends_on:
+      redis:
+        condition: service_healthy
+
   api:
     build:
       context: .
@@ -37,6 +51,7 @@ services:
       JWT_SECRET: ${JWT_SECRET:-dev-insecure-jwt-secret-change-me}
       TICKET_SECRET: ${TICKET_SECRET:-dev-insecure-ticket-secret-change-me}
       HTTP_ADDR: ":8080"
+      ANALYTICS_ADDR: analytics:9100
       STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
       STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
     ports:
@@ -46,6 +61,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      analytics:
+        condition: service_started
 
 volumes:
   pgdata:
