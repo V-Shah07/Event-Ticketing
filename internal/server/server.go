@@ -12,13 +12,16 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/v-shah07/event-ticketing/internal/auth"
 	"github.com/v-shah07/event-ticketing/internal/event"
+	"github.com/v-shah07/event-ticketing/internal/payment"
 	"github.com/v-shah07/event-ticketing/internal/user"
 )
 
 type Deps struct {
-	Pool  *pgxpool.Pool
-	Redis *redis.Client
-	JWT   *auth.Manager
+	Pool          *pgxpool.Pool
+	Redis         *redis.Client
+	JWT           *auth.Manager
+	Payments      *payment.Service
+	StripeWebhKey string
 }
 
 func New(d Deps) http.Handler {
@@ -55,6 +58,16 @@ func New(d Deps) http.Handler {
 			r.Post("/{id}/publish", eventH.Publish)
 		})
 	})
+
+	// Payments: checkout requires a buyer token; the webhook is called by Stripe.
+	if d.Payments != nil {
+		payH := payment.NewHandler(d.Payments, d.StripeWebhKey)
+		r.Group(func(r chi.Router) {
+			r.Use(d.JWT.Middleware)
+			r.Post("/checkout", payH.Checkout)
+		})
+		r.Post("/webhooks/stripe", payH.Webhook)
+	}
 
 	return r
 }
