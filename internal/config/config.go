@@ -16,6 +16,7 @@ type Config struct {
 	KafkaBrokers     string
 	AnalyticsAddr    string
 	GRPCAddr         string
+	QRDir            string
 }
 
 func getenv(key, def string) string {
@@ -37,5 +38,6 @@ func Load() Config {
 		KafkaBrokers:     getenv("KAFKA_BROKERS", "localhost:9092"),
 		AnalyticsAddr:    getenv("ANALYTICS_ADDR", "localhost:9100"),
 		GRPCAddr:         getenv("GRPC_ADDR", ":9100"),
+		QRDir:            getenv("QR_DIR", "./data/qr"),
 	}
 }
