@@ -21,6 +21,7 @@ import (
 	"github.com/v-shah07/event-ticketing/internal/db"
 	"github.com/v-shah07/event-ticketing/internal/events"
 	"github.com/v-shah07/event-ticketing/internal/payment"
+	"github.com/v-shah07/event-ticketing/internal/ratelimit"
 	"github.com/v-shah07/event-ticketing/internal/server"
 	"github.com/v-shah07/event-ticketing/internal/streaming"
 	"github.com/v-shah07/event-ticketing/internal/ticket"
@@ -102,6 +103,9 @@ func main() {
 	signer := ticket.NewSigner(cfg.TicketSecret)
 	payments.SetTicketIssuer(ticket.NewIssuer(pool, signer, cfg.QRDir))
 
+	// Sliding-window rate limiter for checkout (per IP + per user).
+	checkoutLimit := ratelimit.New(rdb, 20, time.Minute)
+
 	handler := server.New(server.Deps{
 		Pool:          pool,
 		Redis:         rdb,
@@ -111,6 +115,7 @@ func main() {
 		TicketSigner:  signer,
 		QRDir:         cfg.QRDir,
 		DashboardHub:  hub,
+		CheckoutLimit: checkoutLimit,
 	})
 
 	srv := &http.Server{
