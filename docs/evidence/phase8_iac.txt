@@ -1,0 +1,15 @@
+=== terraform validate (infra/terraform) ===
+[32m[1mSuccess![0m The configuration is valid.
+[0m
+
+=== kubeconform: raw k8s manifests ===
+Summary: 9 resources found in 4 files - Valid: 9, Invalid: 0, Errors: 0, Skipped: 0
+
+=== helm lint ===
+==> Linting infra/helm/event-ticketing
+[INFO] Chart.yaml: icon is recommended
+
+1 chart(s) linted, 0 chart(s) failed
+
+=== helm template | kubeconform ===
+Summary: 6 resources found parsing stdin - Valid: 6, Invalid: 0, Errors: 0, Skipped: 0

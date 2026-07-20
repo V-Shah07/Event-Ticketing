@@ -89,3 +89,32 @@ jobs:
 
       - name: go test
         run: go test ./... -v -count=1
+
+  iac:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install terraform, kubeconform, helm
+        run: |
+          set -euo pipefail
+          curl -sSL -o tf.zip https://releases.hashicorp.com/terraform/1.9.8/terraform_1.9.8_linux_amd64.zip
+          unzip -q tf.zip && sudo mv terraform /usr/local/bin/
+          curl -sSL https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz | tar -xz
+          sudo mv kubeconform /usr/local/bin/
+          curl -sSL https://get.helm.sh/helm-v3.16.3-linux-amd64.tar.gz | tar -xz
+          sudo mv linux-amd64/helm /usr/local/bin/
+
+      - name: terraform validate (never applied)
+        run: |
+          terraform -chdir=infra/terraform init -backend=false -input=false
+          terraform -chdir=infra/terraform fmt -check
+          terraform -chdir=infra/terraform validate
+
+      - name: kubeconform k8s manifests
+        run: kubeconform -strict -summary infra/k8s/*.yaml
+
+      - name: helm lint + template validation
+        run: |
+          helm lint infra/helm/event-ticketing
+          helm template et infra/helm/event-ticketing | kubeconform -strict -summary

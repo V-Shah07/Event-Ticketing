@@ -1,0 +1,45 @@
+nameOverride: ""
+
+api:
+  image:
+    repository: ghcr.io/v-shah07/event-ticketing-api
+    tag: latest
+  replicas: 3
+  port: 8080
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 512Mi
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 20
+    targetCPUUtilizationPercentage: 70
+
+analytics:
+  image:
+    repository: ghcr.io/v-shah07/event-ticketing-analytics
+    tag: latest
+  replicas: 2
+  port: 9100
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 8
+    targetCPUUtilizationPercentage: 75
+
+config:
+  ANALYTICS_ADDR: "analytics:9100"
+  REDIS_ADDR: "event-ticketing-redis:6379"
+  KAFKA_BROKERS: "event-ticketing-kafka:9092"
+  QR_DIR: "/data/qr"

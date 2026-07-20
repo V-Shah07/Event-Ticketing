@@ -6,3 +6,9 @@ node_modules/
 frontend/dist/
 *.png
 !docs/**/*.png
+
+# Terraform (manifests are committed; local state/plugins are not)
+infra/terraform/.terraform/
+infra/terraform/*.tfstate
+infra/terraform/*.tfstate.*
+infra/terraform/tfplan
