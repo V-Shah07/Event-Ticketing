@@ -1,0 +1,42 @@
+syntax = "proto3";
+
+package analytics.v1;
+
+option go_package = "github.com/v-shah07/event-ticketing/proto/analyticspb";
+
+import "google/protobuf/timestamp.proto";
+
+// PurchaseEvent is emitted by the core API whenever a purchase is committed.
+message PurchaseEvent {
+  string purchase_id = 1;
+  string event_id = 2;
+  string tier_id = 3;
+  string buyer_id = 4;
+  int64 amount_cents = 5;
+  int32 quantity = 6;
+  google.protobuf.Timestamp occurred_at = 7;
+}
+
+message RecordAck {
+  bool received = 1;
+  uint64 total_events = 2;
+}
+
+message StatsRequest {
+  string event_id = 1;
+}
+
+message EventStats {
+  string event_id = 1;
+  int64 total_revenue_cents = 2;
+  int64 tickets_sold = 3;
+  double sales_velocity_per_min = 4;
+}
+
+// AnalyticsService receives purchase events from the core API. RecordStream is
+// a client-streaming RPC so the core can push a live feed of purchases without
+// a round trip per event; GetStats is a simple unary read.
+service AnalyticsService {
+  rpc RecordStream(stream PurchaseEvent) returns (RecordAck);
+  rpc GetStats(StatsRequest) returns (EventStats);
+}
