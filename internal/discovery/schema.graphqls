@@ -1,0 +1,52 @@
+scalar Time
+
+type Tier {
+  id: ID!
+  name: String!
+  priceCents: Int!
+  capacity: Int!
+  sold: Int!
+  remaining: Int!
+}
+
+type Event {
+  id: ID!
+  title: String!
+  description: String!
+  category: String!
+  venue: String!
+  lat: Float
+  lng: Float
+  state: String!
+  startsAt: Time
+  minPriceCents: Int
+  tiers: [Tier!]!
+  distanceMeters: Float
+  trendingScore: Float!
+}
+
+input GeoFilter {
+  lat: Float!
+  lng: Float!
+  radiusMeters: Float!
+}
+
+"""
+EventFilter combines all discovery dimensions. Any subset may be supplied; they
+are ANDed together and resolved in a single query.
+"""
+input EventFilter {
+  category: String
+  startsAfter: Time
+  startsBefore: Time
+  minPriceCents: Int
+  maxPriceCents: Int
+  near: GeoFilter
+}
+
+type Query {
+  "Multi-dimensional discovery: location + date + category + price in one query."
+  events(filter: EventFilter): [Event!]!
+  "Geo radius search ordered by distance, ranked with a recency-weighted trending score."
+  eventsNearMe(lat: Float!, lng: Float!, radiusMeters: Float!): [Event!]!
+}

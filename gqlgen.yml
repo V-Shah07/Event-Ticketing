@@ -1,0 +1,27 @@
+schema:
+  - internal/discovery/schema.graphqls
+
+exec:
+  filename: internal/discovery/generated.go
+  package: discovery
+
+model:
+  filename: internal/discovery/models_gen.go
+  package: discovery
+
+resolver:
+  layout: follow-schema
+  dir: internal/discovery
+  package: discovery
+  filename_template: "{name}.resolvers.go"
+
+# Map GraphQL Int to int so counts/cents bind cleanly.
+models:
+  ID:
+    model:
+      - github.com/99designs/gqlgen/graphql.ID
+      - github.com/99designs/gqlgen/graphql.Int
+  Int:
+    model:
+      - github.com/99designs/gqlgen/graphql.Int
+      - github.com/99designs/gqlgen/graphql.Int64
