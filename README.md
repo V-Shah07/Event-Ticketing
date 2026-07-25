@@ -144,46 +144,4 @@ authored as code and validated in CI, but **not applied** to any live cluster:
 
 Run it all locally with `make infra-validate`.
 
-## Interview talking points
 
-- **Idempotent Stripe webhooks:** the payment-intent ID is the idempotency key,
-  stored in Redis with a TTL, checked before any side effect. Defended in depth
-  by a `SELECT ... FOR UPDATE` on the purchase row, so even a 100×-concurrent
-  replay creates exactly one ticket.
-- **No overselling:** `SELECT ... FOR UPDATE` on the tier row serializes
-  concurrent buyers; the Redis inventory cache only ever reflects committed state.
-- **Exactly-once entry:** QR validation uses Redis `SETNX` as an atomic
-  distributed lock — the first scanner wins, later scans see the key and are
-  rejected as "already scanned." Cheaper than a DB lock held open during a scan.
-- **Why gRPC internally vs REST?** Typed Protobuf contracts catch schema drift at
-  compile time; a client-streaming RPC pushes purchase events without polling.
-- **Why GraphQL for discovery but REST for writes?** GraphQL collapses the
-  multi-dimensional discovery filter (location + date + category + price) into a
-  single round trip; REST's simplicity + idempotency suits purchases/creation.
-- **Why Kafka for analytics vs direct DB writes?** It decouples analytics from the
-  purchase critical path — checkout commits fast, the pipeline can lag without
-  hurting UX; the WebSocket dashboard still updates within milliseconds.
-- **Rate limiting:** a Redis sliding-window log (one atomic Lua script) keyed per
-  IP and per user, plus a per-event purchase cap.
-
-## Resume bullets (each backed by committed evidence in `docs/evidence/`)
-
-- Built a full-stack event ticketing platform in Go with Stripe payment
-  processing; idempotent webhook delivery via Redis keys yields **zero duplicate
-  tickets across 100 concurrent payment events** (`phase2_test.txt`).
-- Implemented distributed QR ticket validation using Redis `SETNX` atomic
-  locking, guaranteeing **exactly-once entry across 50 concurrent door scanners**
-  (`phase5_test.txt`).
-- Designed real-time inventory management with PostgreSQL pessimistic locking
-  (`SELECT FOR UPDATE`) preventing overselling under **100 concurrent buyers** for
-  the same tier (`phase3_test.txt`).
-- Built a Kafka-driven sales analytics pipeline with WebSocket fan-out delivering
-  live dashboard updates **within ~5ms of purchase events** (`phase6_test.txt`).
-- Implemented gRPC + Protobuf internal service communication between the core API
-  and an analytics service — strongly-typed contracts with streaming.
-- Added a GraphQL API layer via gqlgen for flexible event discovery —
-  multi-dimensional filtering (location + date + category + price) in one round trip.
-- Authored reproducible infrastructure-as-code (Terraform + Kubernetes manifests
-  with HPA) for AWS; validated in CI, deployed locally via Docker Compose.
-- Implemented location-based discovery via PostGIS spatial queries serving
-  **~40ms p99 across 300 events** with trending-score ranking (`phase7_test.txt`).
