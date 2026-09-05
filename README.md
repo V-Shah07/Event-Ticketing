@@ -4,6 +4,7 @@ A backend-heavy, low-fee event ticketing platform (think "Eventbrite for student
 clubs and small venues") written in **Go**. Organizers create events and ticket
 tiers; buyers pay via Stripe, receive a QR code, and check in at the door.
 
+<!-- 
 The technical story here is the **backend**: payment idempotency, distributed
 lock correctness, and concurrency safety under contention — each proven with
 tests that deliberately try to break them.
@@ -144,4 +145,4 @@ authored as code and validated in CI, but **not applied** to any live cluster:
 
 Run it all locally with `make infra-validate`.
 
-
+-->
